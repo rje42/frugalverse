@@ -1,0 +1,65 @@
+--- 
+title: "Introduction to the frugalverse"
+author: "Robin J. Evans"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+documentclass: book
+bibliography: [book.bib, packages.bib, refs.bib]
+# url: your book url like https://bookdown.org/yihui/bookdown
+# cover-image: path to the social sharing image like images/cover.jpg
+description: |
+  This book gives a very brief introduction to the packages causl and survivl.
+link-citations: yes
+github-repo: rstudio/bookdown-demo
+---
+
+# The frugal parameterization
+
+\newcommand{\cmid}{\,|\,}
+
+A _frugal parameterization_ of $(Z,A,Y)$ consists of (at least) three separate pieces, 
+corresponding to smooth and regular parameterizations of:
+
+ - the past -- that is $P(Z,A)$;
+ 
+ - the causal piece of interest -- $P^*(Y \mid A)$;
+ 
+ - a _(conditional) dependence measure_ that describes the structure of $Z$-$Y$
+ interactions, typically a copula or conditional odds ratio.
+ 
+These can then be combined into unique smooth parameterization of $P(Z,A,Y)$.
+
+## Marginal modelling
+
+The frugal parameterization was introduced to facilitate the modelling of 
+_marginal_ causal quantities.  For example, consider the graph below, and 
+suppose we are interested in modelling $P(Y \cmid do(A=a))$ as a function of 
+$a$.  Under the assumptions encoded in the graph this is identified by
+\begin{align*}
+P(Y \mid do(A=a)) = \sum_{z \in {\cal Z}} P(Z=z) \cdot P(Y \cmid Z=z, A=a).
+\end{align*}
+In this case the we would have $P^*(Y \mid A) = P(Y \mid do(A))$, and choose 
+a dependence measure suitable for the task.  
+
+
+<!-- ```{r, eval=FALSE} -->
+<!-- bookdown::render_book() -->
+<!-- ``` -->
+
+<!-- To render this example to PDF as a `bookdown::pdf_book`, you'll need to install XeLaTeX. You are recommended to install TinyTeX (which includes XeLaTeX): <https://yihui.org/tinytex/>. -->
+
+<!-- ## Preview book -->
+
+<!-- As you work, you may start a local server to live preview this HTML book. This preview will update as you edit the book when you save individual .Rmd files. You can start the server in a work session by using the RStudio add-in "Preview book", or from the R console: -->
+
+<!-- ```{r eval=FALSE} -->
+<!-- bookdown::serve_book() -->
+<!-- ``` -->
+
+
+```{r include=FALSE}
+# automatically create a bib database for R packages
+knitr::write_bib(c(
+  .packages(), 'bookdown', 'knitr', 'rmarkdown'
+), 'packages.bib')
+```

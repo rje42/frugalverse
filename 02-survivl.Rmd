@@ -1,0 +1,16 @@
+# The `survivl` Package {#survivl}
+
+In this section we expand to the most useful context for marginal models: 
+time-to-event or _survival data_.
+
+## Installation
+
+As with the `causl` package, you can install `survivl` from GitHub:
+```{r survivl_install, eval=FALSE}
+devtools::install_github("rje42/survivl")
+```
+
+Then load the package.
+```{r survivl_load}
+library(survivl)
+```

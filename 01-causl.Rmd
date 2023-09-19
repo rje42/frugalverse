@@ -1,0 +1,38 @@
+# The `causl` Package {#causl}
+
+In this chapter we introduce the `causl` package, which performs basic simulation
+and fitting for static models.
+
+
+## Installation
+
+You can obtain and install `causl` from GitHub.  You will need the `devtools` 
+package 
+```{r causl_install, eval=FALSE}
+install.packages("devtools")
+devtools::install_github("rje42/causl")
+```
+
+Now load the library.
+```{r causl_load}
+library(causl)
+```
+
+You can immediately simulate from your first model:
+```{r basic_causl}
+rfrugalParam(10, pars=list(z=list(beta=0, phi=1),
+                           x=list(beta=c(0,0.5), phi=0.75),
+                           y=list(beta=c(-0.25,0.5), phi=0.5),
+                           cop=list(beta=1)),
+             family=c(1,1,1,1))
+```
+
+## Syntax
+
+Specify a collection of formulas to define your model.
+```{r formulas_causl}
+forms <- list(Z ~ 1,
+              A ~ Z,
+              Y ~ A + Z,
+              cop ~ 1)
+```
