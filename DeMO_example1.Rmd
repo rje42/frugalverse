@@ -1,0 +1,155 @@
+---
+title: "Simulating Data from Causal Models using the causl R Package"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The `causl` R package provides a set of tools for simulating data from, and fitting causal models. In this tutorial, we will demonstrate how to use the `causl` package to simulate data.
+
+# Install and load the `causl` Package
+
+Before we can use the `causl` package, we need to install it. We can do this using the following code:
+
+```{r install-causl, message=FALSE}
+# devtools::install_github("rje42/causl")
+library(causl)
+
+```
+
+```{r, echo = F, message=FALSE}
+library(data.table)
+library(DiagrammeR)
+library(AIPW)
+library(SuperLearner)
+
+```
+
+# Simulate Data
+
+We start by selecting variables for our model. Represented by the DAG below, the following variables are in the model.
+
+* $X$ : a binary treatment indicator
+* $Y$ : a binary outcome variable
+* $Z_1$ : a continuous covariate
+* $Z_2$ : a binary covariate
+
+
+```{r,echo=FALSE,fig.width=2.5, fig.height=2.5}
+grViz("
+	digraph causal {
+	splines=false
+	
+	  # Nodes
+	  node [shape = circle,
+	  fixedsize = true]
+	  A [label = 'X']
+	  R [label = 'Z1,Z2']
+	  F [label = 'Y']
+	  
+	  # Edges
+	  edge [color = black,
+	        arrowhead = vee]
+	  rankdir = LR
+	  A->F
+	  R->A
+	  R->F
+
+	  # Graph
+	  graph [overlap = true, fontsize = 10]
+	}")
+
+```
+
+Theorem 3.1 in the paper states that we can parameterize the model using parametric models of the three pieces:
+
+$p(x,z_1,z_2)$ , $p(y\mid do(x))$, and $\phi^*_{YZ_1Z_2\mid X}(y,z_1,z_2\mid x)$.
+
+We therefore parameterize the distributions as below:
+
+* $Z_1 \sim \mathcal{N}(0,1)$
+* $Z_2 \sim \text{Bernoulli}(0.5)$
+* $X \sim \text{Bernoulli}(\text{expit}( Z_1+ Z_2))$
+* $Y\mid do(X) \sim \text{Bernoulli}(\text{expit}(X))$.
+
+As outlined in Example R6 in the paper, we use a latent Gaussian copula model to specify the dependence between $Z_1$, $Z_2$ and $Y$, which is a combination of continuous and discrete variables. Speficially,
+
+* $\rho_{Z_1Z_2} = 2 \text{expit}(0.1) -1$
+* $\rho_{Z_1Y} = 2 \text{expit}(0.2) -1$
+* $\rho_{Z_1Y} = 2 \text{expit}(0.3) -1$
+
+We can use the `rfrugalParam()` function to simulate data from the above causal model.
+
+```{r}
+
+n <- 1000
+# specify families of variables
+
+family <- list(c(1,5), c(5), 5,1)
+
+# formula
+
+forms  <- list(c(Z1 ~ 1,Z2 ~ 1),
+               list(X ~ Z1 + Z2),
+               Y ~ X,
+               ~ 1)
+
+# specify parameters
+pars <- list(Z1 = list(beta = 0,phi = 1),
+             Z2 = list(beta = 0),
+             X = list(beta = c(0,1,1)),
+             Y = list(beta = c(0,1)),
+             cop = list(beta = matrix(c(0.1,0.2,0.3),nrow = 1)))
+
+dat <- as.data.table(causl:::rfrugalParam(n = n, formulas = forms, family = family, pars = pars))
+
+head(dat)
+```
+
+# Check the simulated data
+
+We use the `AIPW` package to verify the simulated causal effect. The results indicate that the causal effects were simulated as intended.
+
+```{r}
+# true values
+or.true <- exp(1)
+rd.true <- expit(1) - expit(0)
+rr.true <- expit(1) / expit(0)
+print(as.data.table(list(or.true = or.true,
+                         rd.true = rd.true,
+                         rr.true = rr.true)))
+
+
+aipw.est <- AIPW$new(Y = dat$Y,
+                   A = dat$X,
+                   W = dat[,c("Z1","Z2")], 
+                   Q.SL.library = c("SL.mean","SL.speedglm"),
+                   g.SL.library = c("SL.mean","SL.speedglm"),
+                   k_split = 3,
+                   verbose = FALSE)$fit()$summary(g.bound = 0.025)
+# Odds Ratio
+aipw.est$result
+
+```
+
+
+# Fitting
+
+We can use the `fitCausal` function to fit a causal model on data.
+
+```{r}
+# start <- Sys.time()
+causal.fit <- fitCausal(dat = dat, formulas = unlist(forms[-2]), family = unlist(family[-2]), sandwich = T)
+# print(paste0("Fitting time: ",Sys.time() -start))
+causal.fit
+```
+
+
+
+
