@@ -1,7 +1,7 @@
 # The `causl` Package {#causl}
 
 In this chapter we introduce the `causl` package, which performs basic simulation
-and fitting for static models.
+and fitting for static models, as discussed in @evans23param.
 
 
 ## Installation
@@ -10,7 +10,8 @@ You can obtain and install `causl` from GitHub.  You will need the `devtools`
 package 
 ```{r causl_install, eval=FALSE}
 install.packages("devtools")
-devtools::install_github("rje42/causl")
+devtools::install_github("rje42/causl") 
+## or remotes::install_github("rje42/causl")
 ```
 
 Now load the library.
@@ -31,8 +32,162 @@ rfrugalParam(10, pars=list(z=list(beta=0, phi=1),
 
 Specify a collection of formulas to define your model.
 ```{r formulas_causl}
-forms <- list(Z ~ 1,
-              A ~ Z,
-              Y ~ A + Z,
-              cop ~ 1)
+forms <- list(Z ~ A,
+              list(A ~ 1, B ~ A*Z),
+              Y ~ A*B,
+               ~ 1)
 ```
+Note that multiple formulas can be specified by putting a list into the relevant
+entry.
+
+You will also need to specify a list of the family variables.
+```{r family_causl}
+fam <- list(1, c(5,5), 1, 1)
+```
+Note that we can have a vector of family variables if one of the entries (covariates,
+treatments, outcomes, copula) has multiple entries.  Here 1 indicates a Gaussian
+distribution, and 5 a Bernoulli.  
+
+We also need to specify parameters for each random variable, and for the copula.
+```{r pars_causl}
+pars <- list(A = list(beta=0),
+             Z = list(beta=c(-0.2,0.4), phi=1),
+             B = list(beta=c(-0.4,0.1,0.2,0.05)),
+             Y = list(beta=c(-0.4,0.2,0.3,0.1), phi=0.5),
+             cop = list(beta=0.5)
+             )
+```
+
+```{r sim_causl}
+n <- 1e3
+dat <- rfrugalParam(n, formulas = forms, family = fam, pars = pars)
+head(dat)
+```
+
+
+## Two confounding variables
+
+```{r libs, message=FALSE}
+# library(data.table)
+library(DiagrammeR)
+library(AIPW)
+library(SuperLearner)
+```
+
+We start by selecting variables for our model. Represented by the DAG below, the following variables are in the model.
+
+* $X$ : a binary treatment indicator
+* $Y$ : a binary outcome variable
+* $Z_1$ : a continuous covariate
+* $Z_2$ : a binary covariate
+
+
+```{r,echo=FALSE,fig.width=2.5, fig.height=2.5}
+grViz("
+	digraph causal {
+	splines=false
+	
+	  # Nodes
+	  node [shape = circle,
+	  fixedsize = true]
+	  A [label = 'X']
+	  R [label = 'Z1,Z2']
+	  F [label = 'Y']
+	  
+	  # Edges
+	  edge [color = black,
+	        arrowhead = vee]
+	  rankdir = LR
+	  A->F
+	  R->A
+	  R->F
+
+	  # Graph
+	  graph [overlap = true, fontsize = 10]
+	}")
+
+```
+
+Theorem 3.1 in the paper states that we can parameterize the model using parametric models of the three pieces:
+
+$p(x,z_1,z_2)$ , $p(y\mid do(x))$, and $\phi^*_{YZ_1Z_2\mid X}(y,z_1,z_2\mid x)$.
+
+We therefore parameterize the distributions as below:
+
+* $Z_1 \sim \mathcal{N}(0,1)$
+* $Z_2 \sim \text{Bernoulli}(0.5)$
+* $X \sim \text{Bernoulli}(\text{expit}( Z_1+ Z_2))$
+* $Y\mid do(X) \sim \text{Bernoulli}(\text{expit}(X))$.
+
+As outlined in Example R6 in the paper, we use a latent Gaussian copula model to specify the dependence between $Z_1$, $Z_2$ and $Y$, which is a combination of continuous and discrete variables. Speficially,
+
+* $\rho_{Z_1Z_2} = 2 \text{expit}(0.1) -1$
+* $\rho_{Z_1Y} = 2 \text{expit}(0.2) -1$
+* $\rho_{Z_1Y} = 2 \text{expit}(0.3) -1$
+
+We can use the `rfrugalParam()` function to simulate data from the above causal model.
+
+```{r}
+
+n <- 1000
+# specify families of variables
+
+family <- list(c(1,5), c(5), 5,1)
+
+# formula
+forms  <- list(c(Z1 ~ 1,Z2 ~ 1),
+               list(X ~ Z1 + Z2),
+               Y ~ X,
+               ~ 1)
+
+# specify parameters
+pars <- list(Z1 = list(beta = 0,phi = 1),
+             Z2 = list(beta = 0),
+             X = list(beta = c(0,1,1)),
+             Y = list(beta = c(0,1)),
+             cop = list(beta = matrix(c(0.1,0.2,0.3),nrow = 1)))
+
+dat <- rfrugalParam(n = n, formulas = forms, family = family, pars = pars)
+
+head(dat)
+```
+
+## Check the simulated data
+
+We use the `AIPW` package to verify the simulated causal effect. The results indicate that the causal effects were simulated as intended.
+
+```{r}
+# true values
+or_true <- exp(1)
+rd_true <- expit(1) - expit(0)
+rr_true <- expit(1) / expit(0)
+c(or_true = or_true,
+  rd_true = rd_true,
+  rr_true = rr_true)
+
+
+aipw_est <- AIPW$new(Y = dat$Y,
+                   A = dat$X,
+                   W = dat[,c("Z1","Z2")], 
+                   Q.SL.library = c("SL.mean","SL.speedglm"),
+                   g.SL.library = c("SL.mean","SL.speedglm"),
+                   k_split = 3,
+                   verbose = FALSE)$fit()$summary(g.bound = 0.025)
+# Odds Ratio
+aipw_est$result
+
+```
+
+
+## Fitting
+
+We can use the `fitCausal` function to fit a causal model on data.
+
+```{r mle, cache=TRUE}
+# start <- Sys.time()
+causal_fit <- fitCausal(dat = dat, formulas = unlist(forms[-2]), family = unlist(family[-2]), sandwich = T)
+# print(paste0("Fitting time: ",Sys.time() -start))
+causal_fit
+```
+
+
